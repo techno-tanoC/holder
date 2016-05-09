@@ -1,6 +1,13 @@
-module Lib where
+module Lib (
+  Holder
+, newHolder
+, get
+, insert
+, delete
+, modify
+) where
 
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 import Data.Traversable
 import Control.Applicative
 import Control.Concurrent.STM
@@ -8,20 +15,20 @@ import Control.Concurrent.STM.TVar
 
 newtype Holder k a = Holder { holder :: TVar (M.Map k a) }
 
-empty :: IO (Holder k a)
-empty = Holder <$> newTVarIO M.empty
+newHolder :: STM (Holder k v)
+newHolder = fmap Holder . newTVar $ M.empty
 
-find :: Ord k => k -> Holder k a -> IO (Maybe a)
-find k (Holder h) = M.lookup k <$> readTVarIO h
+get :: Ord k => k -> Holder k a -> STM (Maybe a)
+get k (Holder t) = M.lookup k <$> readTVar t
 
-insert :: Ord k => k -> a -> Holder k a -> IO ()
-insert k a (Holder h) = atomically . modifyTVar h $ M.insertWith (flip const) k a
+insert :: Ord k => k -> a -> Holder k a -> STM ()
+insert k a (Holder t) = modifyTVar' t $ M.insert k a
 
-update :: Ord k => k -> (a -> a) -> Holder k a -> IO ()
-update k f (Holder h) = atomically . modifyTVar h $ M.adjust f k
+delete :: Ord k => k -> Holder k a -> STM ()
+delete k (Holder t) = modifyTVar' t (M.delete k)
 
-elems :: Holder k a -> IO [a]
-elems (Holder h) = atomically $ M.elems <$> readTVar h
+modify :: Ord k => (a -> a) -> k -> Holder k a -> STM ()
+modify f k (Holder t) = modifyTVar' t (M.adjust f k)
 
-assocs :: Holder k a -> IO [(k, a)]
-assocs (Holder h) = atomically $ M.assocs <$> readTVar h
+dump :: Holder k a -> STM (M.Map k a)
+dump = readTVar . holder
